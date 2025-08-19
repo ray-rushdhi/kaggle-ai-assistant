@@ -46,24 +46,62 @@ function scrapeKagglePage() {
 document.addEventListener('DOMContentLoaded', () => {
   const analyzeBtn = document.getElementById('analyzeBtn');
   const resultsDiv = document.getElementById('results');
-  const scrapedDataPre = document.getElementById('scrapedData');
+  
+  resultsDiv.innerHTML = ''; 
 
   analyzeBtn.addEventListener('click', async () => {
+    analyzeBtn.innerText = 'Analyzing...';
+    analyzeBtn.disabled = true;
+
     let [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
     const scrapingResult = await chrome.scripting.executeScript({
       target: { tabId: tab.id },
-      function: scrapeKagglePage,
+      function: scrapeKagglePage, 
     });
+    const scrapedData = scrapingResult[0].result;
 
-    const data = scrapingResult[0].result;
-    let formattedData = `Title: ${data.title}\n\n--- Description ---\n${data.description}\n\n--- Data Schema ---\n${data.schema}`;
-    
-    formattedData = formattedData.replace(/View less/g, '').trim();
+    try {
+      const response = await fetch('http://localhost:3000/api/generate-ideas', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(scrapedData),
+      });
 
-    scrapedDataPre.innerText = formattedData;
-    resultsDiv.classList.remove('hidden');
-    analyzeBtn.innerText = 'Analysis Complete!';
-    analyzeBtn.disabled = true;
+      if (!response.ok) {
+        throw new Error(`Server responded with status: ${response.status}`);
+      }
+
+      const projectIdeas = await response.json();
+      displayProjectIdeas(projectIdeas);
+
+    } catch (error) {
+      console.error('Error fetching project ideas:', error);
+      resultsDiv.innerHTML = `<p style="color: red;">Error: Could not get ideas. Is the local server running?</p>`;
+    } finally {
+        resultsDiv.classList.remove('hidden');
+        analyzeBtn.style.display = 'none'; 
+    }
   });
+
+  function displayProjectIdeas(ideas) {
+    resultsDiv.innerHTML = ''; 
+    const title = document.createElement('h4');
+    title.innerText = 'Project Ideas:';
+    resultsDiv.appendChild(title);
+
+    ideas.forEach(idea => {
+      const ideaDiv = document.createElement('div');
+      ideaDiv.className = 'idea'; 
+
+      ideaDiv.innerHTML = `
+        <h5>${idea.title}</h5>
+        <p><strong>Problem Type:</strong> ${idea.problemType}</p>
+        <p>${idea.description}</p>
+      `;
+      resultsDiv.appendChild(ideaDiv);
+    });
+  }
 });
