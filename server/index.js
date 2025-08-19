@@ -32,9 +32,13 @@ app.post('/api/generate-ideas', async (req, res) => {
     
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
     const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const text = response.text();
-
+     const response = await result.response;
+    let text = response.text();
+    const startIndex = text.indexOf('[');
+    const endIndex = text.lastIndexOf(']');
+    if (startIndex !== -1 && endIndex !== -1) {
+      text = text.substring(startIndex, endIndex + 1);
+    }
     const ideas = JSON.parse(text);
     res.json(ideas);
 
