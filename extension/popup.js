@@ -2,26 +2,37 @@ function scrapeKagglePage() {
   const title = document.querySelector('h1')?.innerText.trim();
 
   const descriptionContainer = document.querySelector('.sc-eTCgfj.iLRXUI');
-  let description = '';
-  if (descriptionContainer) {
-    const paragraphs = descriptionContainer.querySelectorAll('p');
-    const descriptionTexts = Array.from(paragraphs).map(p => p.innerText.trim());
-    description = descriptionTexts.join('\n\n'); 
-  }
+  const description = descriptionContainer?.innerText.trim();
 
   let schema = '';
-  if (descriptionContainer) {
-    const schemaRows = descriptionContainer.querySelectorAll('tbody > tr');
+
+  const schemaTableRows = document.querySelectorAll('tbody > tr');
+  if (schemaTableRows && schemaTableRows.length > 0) {
     const schemaData = [];
-    schemaRows.forEach(row => {
+    schemaTableRows.forEach(row => {
       const cells = row.querySelectorAll('td');
       if (cells.length === 2) {
         const columnName = cells[0].innerText.trim();
         const columnDescription = cells[1].innerText.trim();
-        schemaData.push(`- ${columnName}: ${columnDescription}`);
+        if (columnName.toLowerCase() !== 'column name') {
+          schemaData.push(`- ${columnName}: ${columnDescription}`);
+        }
       }
     });
-    schema = schemaData.join('\n'); 
+    schema = schemaData.join('\n');
+  }
+
+  if (!schema) {
+    const columnHeaderElements = document.querySelectorAll('div[role="columnheader"]');
+    if (columnHeaderElements && columnHeaderElements.length > 0) {
+      const columnNames = [];
+      columnHeaderElements.forEach(header => {
+        if (header.innerText) {
+          columnNames.push(header.innerText.trim());
+        }
+      });
+      schema = "Columns: " + columnNames.join(', ');
+    }
   }
 
   return {
@@ -46,8 +57,10 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     const data = scrapingResult[0].result;
-    const formattedData = `Title: ${data.title}\n\nDescription: ${data.description}\n\nSchema:\n${data.schema}`;
+    let formattedData = `Title: ${data.title}\n\n--- Description ---\n${data.description}\n\n--- Data Schema ---\n${data.schema}`;
     
+    formattedData = formattedData.replace(/View less/g, '').trim();
+
     scrapedDataPre.innerText = formattedData;
     resultsDiv.classList.remove('hidden');
     analyzeBtn.innerText = 'Analysis Complete!';
