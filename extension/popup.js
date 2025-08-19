@@ -46,62 +46,93 @@ function scrapeKagglePage() {
 document.addEventListener('DOMContentLoaded', () => {
   const analyzeBtn = document.getElementById('analyzeBtn');
   const resultsDiv = document.getElementById('results');
-  
-  resultsDiv.innerHTML = ''; 
+  let cachedScrapedData = null; 
 
   analyzeBtn.addEventListener('click', async () => {
     analyzeBtn.innerText = 'Analyzing...';
     analyzeBtn.disabled = true;
 
-    let [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-
     const scrapingResult = await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      function: scrapeKagglePage, 
+      target: { tabId: (await chrome.tabs.query({ active: true, currentWindow: true }))[0].id },
+      function: scrapeKagglePage,
     });
-    const scrapedData = scrapingResult[0].result;
+    cachedScrapedData = scrapingResult[0].result; 
 
     try {
       const response = await fetch('http://localhost:3000/api/generate-ideas', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(scrapedData),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(cachedScrapedData),
       });
-
-      if (!response.ok) {
-        throw new Error(`Server responded with status: ${response.status}`);
-      }
-
+      if (!response.ok) throw new Error(`Server error: ${response.status}`);
       const projectIdeas = await response.json();
       displayProjectIdeas(projectIdeas);
-
     } catch (error) {
-      console.error('Error fetching project ideas:', error);
-      resultsDiv.innerHTML = `<p style="color: red;">Error: Could not get ideas. Is the local server running?</p>`;
+      handleError(error, "Could not get project ideas.");
     } finally {
-        resultsDiv.classList.remove('hidden');
-        analyzeBtn.style.display = 'none'; 
+      analyzeBtn.style.display = 'none'; 
     }
   });
 
   function displayProjectIdeas(ideas) {
     resultsDiv.innerHTML = ''; 
     const title = document.createElement('h4');
-    title.innerText = 'Project Ideas:';
+    title.innerText = 'Choose a Project Idea:';
     resultsDiv.appendChild(title);
 
     ideas.forEach(idea => {
-      const ideaDiv = document.createElement('div');
-      ideaDiv.className = 'idea'; 
-
-      ideaDiv.innerHTML = `
+      const ideaCard = document.createElement('div');
+      ideaCard.className = 'idea-card'; 
+      ideaCard.innerHTML = `
         <h5>${idea.title}</h5>
         <p><strong>Problem Type:</strong> ${idea.problemType}</p>
-        <p>${idea.description}</p>
       `;
-      resultsDiv.appendChild(ideaDiv);
+      ideaCard.onclick = () => {
+        getStepByStepGuide(idea);
+      };
+      resultsDiv.appendChild(ideaCard);
     });
+    resultsDiv.classList.remove('hidden');
+  }
+
+  async function getStepByStepGuide(selectedIdea) {
+    resultsDiv.innerHTML = '<h4>Generating your guide...</h4>'; 
+
+    try {
+      const response = await fetch('http://localhost:3000/api/generate-guide', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          datasetContext: cachedScrapedData,
+          selectedIdea: selectedIdea,
+        }),
+      });
+      if (!response.ok) throw new Error(`Server error: ${response.status}`);
+      const { guide } = await response.json();
+      displayGuide(guide);
+    } catch (error) {
+      handleError(error, "Could not generate the guide.");
+    }
+  }
+
+  function displayGuide(guide) {
+    resultsDiv.innerHTML = ''; 
+    const guideContainer = document.createElement('div');
+    guideContainer.className = 'guide-container';
+
+    let guideHtml = guide
+      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') 
+      .replace(/### (.*?)\n/g, '<h3>$1</h3>')   
+      .replace(/## (.*?)\n/g, '<h2>$1</h2>')       
+      .replace(/\* (.*?)\n/g, '<li>$1</li>')      
+      .replace(/\n/g, '<br>');                    
+
+    guideContainer.innerHTML = guideHtml;
+    resultsDiv.appendChild(guideContainer);
+  }
+
+  function handleError(error, message) {
+    console.error(message, error);
+    resultsDiv.innerHTML = `<p style="color: red;">Error: ${message} Is the local server running?</p>`;
   }
 });

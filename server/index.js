@@ -48,6 +48,45 @@ app.post('/api/generate-ideas', async (req, res) => {
   }
 });
 
+app.post('/api/generate-guide', async (req, res) => {
+  try {
+    const { datasetContext, selectedIdea } = req.body;
+
+    const prompt = `You are an expert data science mentor providing a detailed project plan.
+
+    A student has chosen a project idea based on a Kaggle dataset. Your task is to provide a clear, step-by-step guide for them to follow.
+
+    Here is the original dataset information:
+    - Title: "${datasetContext.title}"
+    - Description: "${datasetContext.description}"
+    - Data Schema: "${datasetContext.schema}"
+
+    Here is the project idea the student selected:
+    - Project Title: "${selectedIdea.title}"
+    - Project Description: "${selectedIdea.description}"
+    - Machine Learning Problem Type: "${selectedIdea.problemType}"
+
+    Please generate a practical, high-level guide with the following sections:
+    1.  **Data Cleaning & Preprocessing:** Suggest specific steps relevant to this dataset (e.g., handling missing values in certain columns, converting data types).
+    2.  **Feature Engineering:** Propose 2-3 new features the student could create from the existing data to improve model performance.
+    3.  **Model Selection:** Recommend a simple baseline model to start with, and then a more advanced model that would be suitable for this problem.
+    4.  **Evaluation Metrics:** State the most important metric(s) to use for evaluating the model's performance (e.g., Accuracy, F1-Score, Mean Absolute Error) and explain why.
+
+    Format your response as a single string of text using markdown for headers and lists.`;
+
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const guideText = response.text();
+
+    res.json({ guide: guideText });
+
+  } catch (error) {
+    console.error("Error generating guide:", error);
+    res.status(500).json({ error: 'Failed to generate guide from AI model.' });
+  }
+});
+
 app.listen(port, () => {
   console.log(`Server is running at http://localhost:${port}`);
 });
